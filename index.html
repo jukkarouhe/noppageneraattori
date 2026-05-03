@@ -76,7 +76,8 @@ h1 {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  padding: 4px 0;
   gap: 0;
 }
 
@@ -87,7 +88,7 @@ h1 {
   justify-content: center;
   gap: clamp(6px, 2.5vw, 14px);
   width: 100%;
-  min-height: calc(var(--dice-size) + 10px);
+  min-height: calc(var(--dice-size) + 4px);
   transition: min-height 0.3s;
 }
 
@@ -190,7 +191,7 @@ h1 {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   width: 100%;
   max-width: 340px;
   flex-shrink: 0;
