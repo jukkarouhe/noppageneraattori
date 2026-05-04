@@ -196,6 +196,7 @@ h1 {
   max-width: 340px;
   flex-shrink: 0;
   padding: 0 12px 20px;
+  overflow-y: auto;
 }
 
 #roll-counter {
@@ -221,7 +222,7 @@ h1 {
 .btn:active:not(:disabled) { transform: scale(0.97); box-shadow: 0 1px 4px var(--shadow); }
 
 #btn-roll {
-  background: var(--btn-roll);
+  background: #2a9d3f;
   color: #fff;
 }
 #btn-roll:disabled {
@@ -229,6 +230,15 @@ h1 {
   cursor: default;
   box-shadow: none;
 }
+
+#btn-lock {
+  background: #2d6be4;
+  color: #fff;
+  display: none;
+}
+#btn-lock.visible { display: block; }
+
+
 
 #btn-next {
   background: var(--btn-next);
@@ -274,7 +284,12 @@ h1 {
     <div id="hint">Paina "Heitä noppia" aloittaaksesi.</div>
     <div id="roll-counter">Heittoja jäljellä: 3</div>
     <button class="btn" id="btn-roll">🎲 Heitä noppia</button>
-    <button class="btn" id="btn-next">➡️ Seuraava pelaaja</button>
+    <button class="btn" id="btn-lock">🔒 Lukitse tulos</button>
+
+```
+<button class="btn" id="btn-next">➡️ Seuraava pelaaja</button>
+```
+
   </div>
 </div>
 
@@ -286,6 +301,7 @@ const NUM_DICE = 5;
 let rollsLeft = 3;
 let gameStarted = false;
 let animating = false;
+let resultLocked = false;
 
 // Each die: { id, value, locked }
 let dice = Array.from({length: NUM_DICE}, (_, i) => ({
@@ -295,16 +311,17 @@ let dice = Array.from({length: NUM_DICE}, (_, i) => ({
 }));
 
 // ── DOM refs ──────────────────────────────────────────────────────────────
-const lockedRow   = document.getElementById('locked-row');
-const activeRow   = document.getElementById('active-row');
-const divider     = document.getElementById('divider');
-const labelLocked = document.getElementById('label-locked');
-const labelActive = document.getElementById('label-active');
-const rollCounter = document.getElementById('roll-counter');
-const btnRoll     = document.getElementById('btn-roll');
-const btnNext     = document.getElementById('btn-next');
-const hintEl      = document.getElementById('hint');
-const dragClone   = document.getElementById('drag-clone');
+const lockedRow        = document.getElementById('locked-row');
+const activeRow        = document.getElementById('active-row');
+const divider          = document.getElementById('divider');
+const labelLocked      = document.getElementById('label-locked');
+const labelActive      = document.getElementById('label-active');
+const rollCounter      = document.getElementById('roll-counter');
+const btnRoll          = document.getElementById('btn-roll');
+const btnLock          = document.getElementById('btn-lock');
+const btnNext          = document.getElementById('btn-next');
+const hintEl           = document.getElementById('hint');
+const dragClone        = document.getElementById('drag-clone');
 
 // ── SVG dot positions for faces 1–6 ───────────────────────────────────────
 const DOT_POSITIONS = {
@@ -333,22 +350,29 @@ function render() {
   const lockedDice = dice.filter(d => d.locked);
   const activeDice = dice.filter(d => !d.locked);
   const anyLocked  = lockedDice.length > 0;
+  const gameOver   = rollsLeft === 0;
 
-  divider.classList.toggle('visible', anyLocked && gameStarted);
-  labelLocked.classList.toggle('visible', anyLocked && gameStarted && rollsLeft < 3);
-  labelActive.classList.toggle('visible', anyLocked && gameStarted && rollsLeft < 3);
+  divider.classList.toggle('visible', anyLocked && gameStarted && !resultLocked);
+  labelLocked.classList.toggle('visible', anyLocked && gameStarted && rollsLeft < 3 && !resultLocked);
+  labelActive.classList.toggle('visible', anyLocked && gameStarted && rollsLeft < 3 && !resultLocked);
 
   lockedDice.forEach(d => lockedRow.appendChild(createDieEl(d)));
   activeDice.forEach(d => activeRow.appendChild(createDieEl(d)));
 
   rollCounter.textContent = `Heittoja jäljellä: ${rollsLeft}`;
-  btnRoll.disabled = rollsLeft === 0 || animating;
 
-  const gameOver = rollsLeft === 0;
-  btnNext.classList.toggle('visible', gameOver);
+  // Button visibility
+  const canLock = gameStarted && !gameOver && rollsLeft < 3;
+  btnRoll.disabled = gameOver || animating || resultLocked;
+  btnLock.classList.toggle('visible', canLock);
+  btnLock.textContent = resultLocked ? '🔓 Pura lukitus' : '🔒 Lukitse tulos';
+  btnNext.classList.toggle('visible', gameOver || resultLocked);
 
+  // Hint text
   if (!gameStarted) {
     hintEl.textContent = 'Paina "Heitä noppia" aloittaaksesi.';
+  } else if (resultLocked) {
+    hintEl.innerHTML = 'Tulos lukittu. Paina "Pura lukitus"<br>jos haluat jatkaa heittämistä.';
   } else if (gameOver) {
     hintEl.textContent = 'Katso tuloksesi ja siirry seuraavaan pelaajaan.';
   } else if (rollsLeft === 3) {
@@ -396,10 +420,24 @@ function rollDice() {
 
 // ── Toggle lock (tap on die) ───────────────────────────────────────────────
 function toggleLock(id) {
-  if (!gameStarted || rollsLeft === 3 || animating) return;
+  if (!gameStarted || rollsLeft === 3 || animating || resultLocked) return;
   const d = dice.find(x => x.id === id);
   if (!d) return;
   d.locked = !d.locked;
+  render();
+}
+
+// ── Lock / unlock result ───────────────────────────────────────────────────
+function lockResult() {
+  if (resultLocked) {
+    // Pura lukitus: vapautetaan kaikki nopat keskiriville
+    resultLocked = false;
+    dice.forEach(d => { d.locked = false; });
+  } else {
+    // Lukitse: siirretään kaikki nopat yläriville
+    resultLocked = true;
+    dice.forEach(d => { d.locked = true; });
+  }
   render();
 }
 
@@ -407,6 +445,7 @@ function toggleLock(id) {
 function nextPlayer() {
   rollsLeft = 3;
   gameStarted = false;
+  resultLocked = false;
   dice.forEach(d => { d.locked = false; d.value = 1; });
   render();
 }
@@ -449,8 +488,10 @@ function attachDieListeners(el, d) {
 
 function startDrag(e, dieId) {
   if (animating) return;
-  e.preventDefault();
+  // Only start drag if the pointerdown target is actually the die or its SVG child
   const srcEl = e.currentTarget;
+  if (!srcEl.contains(e.target)) return;
+  e.preventDefault();
   const rect = srcEl.getBoundingClientRect();
 
   // Build clone
@@ -476,9 +517,9 @@ function startDrag(e, dieId) {
   if (d && d.locked) dragClone.style.borderColor = 'var(--locked-glow)';
 
   srcEl.classList.add('dragging');
-  srcEl.setPointerCapture(e.pointerId);
+  try { srcEl.setPointerCapture(e.pointerId); } catch(_) {}
 
-  dragState = { dieId, startX: e.clientX, startY: e.clientY };
+  dragState = { dieId, startX: e.clientX, startY: e.clientY, pointerId: e.pointerId, srcEl };
 }
 
 function moveDrag(e) {
@@ -500,24 +541,12 @@ function endDrag(e, dieId) {
   if (target) {
     const targetId = parseInt(target.dataset.id);
     swapDice(dieId, targetId);
-
-    // Check if dropped in the opposite row (lock/unlock)
+  } else if (gameStarted && rollsLeft < 3 && !resultLocked) {
+    const areaEl = document.getElementById('play-area');
+    const areaRect = areaEl.getBoundingClientRect();
+    const midY = areaRect.top + areaRect.height / 2;
     const srcDie = dice.find(x => x.id === dieId);
-    const tgtDie = dice.find(x => x.id === targetId);
-    if (srcDie && tgtDie && srcDie.locked !== tgtDie.locked && gameStarted && rollsLeft < 3) {
-      // They swapped, their locked states also swap (handled in swapDice)
-    }
-  } else {
-    // Dropped in a row (not on another die) → toggle lock based on Y position
-    if (gameStarted && rollsLeft < 3) {
-      const areaEl = document.getElementById('play-area');
-      const areaRect = areaEl.getBoundingClientRect();
-      const midY = areaRect.top + areaRect.height / 2;
-      const srcDie = dice.find(x => x.id === dieId);
-      if (srcDie) {
-        srcDie.locked = e.clientY < midY;
-      }
-    }
+    if (srcDie) srcDie.locked = e.clientY < midY;
   }
 
   cancelDrag();
@@ -525,6 +554,9 @@ function endDrag(e, dieId) {
 }
 
 function cancelDrag() {
+  if (dragState && dragState.srcEl) {
+    try { dragState.srcEl.releasePointerCapture(dragState.pointerId); } catch(_) {}
+  }
   dragClone.style.display = 'none';
   document.querySelectorAll('.die').forEach(el => {
     el.classList.remove('dragging', 'drag-over');
@@ -553,6 +585,7 @@ function swapDice(idA, idB) {
 
 // ── Button listeners ───────────────────────────────────────────────────────
 btnRoll.addEventListener('click', rollDice);
+btnLock.addEventListener('click', lockResult);
 btnNext.addEventListener('click', nextPlayer);
 
 // ── Init ───────────────────────────────────────────────────────────────────
